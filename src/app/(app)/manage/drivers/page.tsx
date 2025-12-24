@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+// ✅ only change: use your browser client helper instead of the old supabaseClient singleton
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import {
   Users,
   UserPlus,
@@ -60,6 +61,9 @@ function formatPay(pay_type: PayType, pay_rate: number) {
 }
 
 export default function DriversPage() {
+  // ✅ only change: create the browser client instance
+  const supabase = supabaseBrowser();
+
   const [rows, setRows] = useState<DriverRow[]>([]);
   const [filteredRows, setFilteredRows] = useState<DriverRow[]>([]);
   const [busy, setBusy] = useState(true);
@@ -408,15 +412,11 @@ export default function DriversPage() {
                       <div style={{ display: "grid", gap: 6 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <Phone size={14} style={{ color: r.phone ? "#6b7280" : "#d1d5db" }} />
-                          <span style={{ color: r.phone ? "#374151" : "#9ca3af", fontSize: 14 }}>
-                            {r.phone ?? "No phone"}
-                          </span>
+                          <span style={{ color: r.phone ? "#374151" : "#9ca3af", fontSize: 14 }}>{r.phone ?? "No phone"}</span>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <Mail size={14} style={{ color: r.email ? "#6b7280" : "#d1d5db" }} />
-                          <span style={{ color: r.email ? "#374151" : "#9ca3af", fontSize: 14 }}>
-                            {r.email ?? "No email"}
-                          </span>
+                          <span style={{ color: r.email ? "#374151" : "#9ca3af", fontSize: 14 }}>{r.email ?? "No email"}</span>
                         </div>
                       </div>
                     </td>
@@ -489,50 +489,27 @@ export default function DriversPage() {
                 </p>
               </div>
 
-              <button
-                onClick={closeModal}
-                type="button"
-                style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 18, color: "#6b7280" }}
-              >
+              <button onClick={closeModal} type="button" style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 18, color: "#6b7280" }}>
                 ✕
               </button>
             </div>
 
             <div style={{ display: "grid", gap: 12 }}>
               <Field label="Full Name *">
-                <input
-                  value={form.full_name}
-                  onChange={(e) => setForm((p) => ({ ...p, full_name: e.target.value }))}
-                  style={styles.input}
-                  placeholder="e.g. John Smith"
-                />
+                <input value={form.full_name} onChange={(e) => setForm((p) => ({ ...p, full_name: e.target.value }))} style={styles.input} placeholder="e.g. John Smith" />
               </Field>
 
               <Field label="Phone (optional)">
-                <input
-                  value={form.phone}
-                  onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
-                  style={styles.input}
-                  placeholder="07..."
-                />
+                <input value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} style={styles.input} placeholder="07..." />
               </Field>
 
               <Field label="Email (optional)">
-                <input
-                  value={form.email}
-                  onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
-                  style={styles.input}
-                  placeholder="john@example.com"
-                />
+                <input value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} style={styles.input} placeholder="john@example.com" />
               </Field>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <Field label="Pay Type *">
-                  <select
-                    value={form.pay_type}
-                    onChange={(e) => setForm((p) => ({ ...p, pay_type: e.target.value as PayType }))}
-                    style={styles.input}
-                  >
+                  <select value={form.pay_type} onChange={(e) => setForm((p) => ({ ...p, pay_type: e.target.value as PayType }))} style={styles.input}>
                     <option value="hourly">Hourly</option>
                     <option value="shift">Per shift</option>
                   </select>
@@ -564,7 +541,9 @@ export default function DriversPage() {
                 Cancel
               </button>
               <button onClick={save} disabled={saving} style={{ ...styles.btn, background: saving ? "#9ca3af" : "#3b82f6", color: "white", border: "none" }} type="button">
-                {saving ? "Saving..." : (
+                {saving ? (
+                  "Saving..."
+                ) : (
                   <>
                     <CheckCircle size={16} style={{ marginRight: 8 }} />
                     {editing ? "Update Driver" : "Add Driver"}
@@ -582,9 +561,7 @@ export default function DriversPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label style={{ display: "block", fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 6 }}>
-        {label}
-      </label>
+      <label style={{ display: "block", fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 6 }}>{label}</label>
       {children}
     </div>
   );

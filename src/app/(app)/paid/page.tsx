@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+// ✅ ONLY necessary supabase changes:
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AlertCircle, Search } from "lucide-react";
 
 type Row = {
@@ -32,6 +33,9 @@ function formatDate(d: string | null | undefined) {
 }
 
 export default function PaidInvoicesPage() {
+  // ✅ ONLY necessary supabase change:
+  const supabase = supabaseBrowser();
+
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);

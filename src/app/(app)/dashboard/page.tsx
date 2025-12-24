@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import {
   AlertCircle,
-  BarChart3,
   Calendar,
   Car,
   CreditCard,
@@ -12,6 +11,7 @@ import {
   TrendingDown,
   TrendingUp,
   LayoutDashboard,
+  BarChart3,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -138,10 +138,13 @@ function Bar({
 }
 
 export default function DashboardPage() {
+  // ✅ Create cookie-based client inside component
+  const supabase = supabaseBrowser();
+
   const pathname = usePathname();
   const isFinance = pathname === "/dashboard";
   const isOps = pathname === "/dashboard/operations";
-  
+
   // default to current month
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -170,8 +173,13 @@ export default function DashboardPage() {
     try {
       const { data: authData, error: authErr } = await supabase.auth.getUser();
       if (authErr) throw authErr;
+
       const user = authData?.user;
-      if (!user) throw new Error("Auth session missing. Please log in again.");
+      if (!user) {
+        // ✅ Don’t sit inside app with an invalid session
+        window.location.href = "/login";
+        return;
+      }
 
       const invQ = await supabase
         .from("v_invoices")
@@ -341,7 +349,16 @@ export default function DashboardPage() {
   return (
     <div style={{ maxWidth: 1300, margin: "0 auto", padding: "24px 20px" }}>
       {/* Combined Header with Toggle Buttons */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "start",
+          gap: 12,
+          flexWrap: "wrap",
+          marginBottom: 24,
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div
             style={{
@@ -358,7 +375,9 @@ export default function DashboardPage() {
           </div>
 
           <div>
-            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900, color: "#111827" }}>Dashboard</h1>
+            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900, color: "#111827" }}>
+              Dashboard
+            </h1>
             <p style={{ margin: "6px 0 0 0", color: "#6b7280" }}>
               Finance overview (income, outstanding, expenses) for <strong>{monthLabel}</strong>
             </p>
@@ -397,16 +416,33 @@ export default function DashboardPage() {
         </div>
 
         {/* Month picker and Refresh button */}
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
+          }}
+        >
           <div style={pill}>
             <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 800 }}>Status</div>
             <div style={{ fontSize: 14, color: "#111827", fontWeight: 900 }}>Ready</div>
           </div>
-          
+
           <div style={{ display: "grid", gap: 6 }}>
             <label style={label}>Month</label>
             <div style={{ position: "relative" }}>
-              <Calendar size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9ca3af" }} />
+              <Calendar
+                size={16}
+                style={{
+                  position: "absolute",
+                  left: 12,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "#9ca3af",
+                }}
+              />
               <input
                 type="month"
                 value={`${year}-${String(month0 + 1).padStart(2, "0")}`}
@@ -429,7 +465,17 @@ export default function DashboardPage() {
 
       {/* Error */}
       {error && (
-        <div style={{ marginBottom: 14, padding: 14, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, display: "flex", gap: 10 }}>
+        <div
+          style={{
+            marginBottom: 14,
+            padding: 14,
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
+            borderRadius: 12,
+            display: "flex",
+            gap: 10,
+          }}
+        >
           <AlertCircle size={20} color="#dc2626" />
           <div style={{ color: "#991b1b" }}>{error}</div>
         </div>
@@ -443,65 +489,16 @@ export default function DashboardPage() {
         <>
           {/* KPI Cards */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 12, marginBottom: 14 }}>
-            <KpiCard
-              colSpan={3}
-              title="Money received"
-              value={moneyGBP(invoiceMetrics.paidThisMonth)}
-              icon={<TrendingUp size={18} />}
-              hint="Paid this month"
-            />
-
-            <KpiCard
-              colSpan={3}
-              title="Outstanding"
-              value={moneyGBP(invoiceMetrics.outstanding)}
-              icon={<CreditCard size={18} />}
-              hint="Invoiced, unpaid"
-            />
-
-            <KpiCard
-              colSpan={3}
-              title="Overdue"
-              value={moneyGBP(invoiceMetrics.overdue)}
-              icon={<AlertCircle size={18} />}
-              hint="Past due date"
-              danger
-            />
-
-            <KpiCard
-              colSpan={3}
-              title="Expenses paid"
-              value={moneyGBP(expenseMetrics.paidOut)}
-              icon={<TrendingDown size={18} />}
-              hint="Paid this month"
-            />
+            <KpiCard colSpan={3} title="Money received" value={moneyGBP(invoiceMetrics.paidThisMonth)} icon={<TrendingUp size={18} />} hint="Paid this month" />
+            <KpiCard colSpan={3} title="Outstanding" value={moneyGBP(invoiceMetrics.outstanding)} icon={<CreditCard size={18} />} hint="Invoiced, unpaid" />
+            <KpiCard colSpan={3} title="Overdue" value={moneyGBP(invoiceMetrics.overdue)} icon={<AlertCircle size={18} />} hint="Past due date" danger />
+            <KpiCard colSpan={3} title="Expenses paid" value={moneyGBP(expenseMetrics.paidOut)} icon={<TrendingDown size={18} />} hint="Paid this month" />
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 12, marginBottom: 14 }}>
-            <KpiCard
-              colSpan={4}
-              title="Expenses owed"
-              value={moneyGBP(expenseMetrics.unpaidOwed)}
-              icon={<PoundSterling size={18} />}
-              hint="Unpaid expenses"
-            />
-
-            <KpiCard
-              colSpan={4}
-              title="Net (received − paid expenses)"
-              value={moneyGBP(net)}
-              icon={<PoundSterling size={18} />}
-              hint="Cash position"
-              highlight={net >= 0}
-            />
-
-            <KpiCard
-              colSpan={4}
-              title="Mileage (completed)"
-              value={`${mileageMetrics.completedMiles.toFixed(0)} mi`}
-              icon={<Car size={18} />}
-              hint={`${mileageMetrics.completedJobs} completed job(s)`}
-            />
+            <KpiCard colSpan={4} title="Expenses owed" value={moneyGBP(expenseMetrics.unpaidOwed)} icon={<PoundSterling size={18} />} hint="Unpaid expenses" />
+            <KpiCard colSpan={4} title="Net (received − paid expenses)" value={moneyGBP(net)} icon={<PoundSterling size={18} />} hint="Cash position" highlight={net >= 0} />
+            <KpiCard colSpan={4} title="Mileage (completed)" value={`${mileageMetrics.completedMiles.toFixed(0)} mi`} icon={<Car size={18} />} hint={`${mileageMetrics.completedJobs} completed job(s)`} />
           </div>
 
           {/* Charts + Alerts */}

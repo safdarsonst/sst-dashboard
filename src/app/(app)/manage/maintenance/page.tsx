@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+// ✅ ONLY CHANGE: replace this import
+// import { supabase } from "@/lib/supabaseClient";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import {
   Plus,
   Edit,
@@ -127,6 +129,9 @@ function badgeStyles(status: Status): { bg: string; text: string; border: string
 }
 
 export default function MaintenancePage() {
+  // ✅ ONLY CHANGE: create client inside component
+  const supabase = supabaseBrowser();
+
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);

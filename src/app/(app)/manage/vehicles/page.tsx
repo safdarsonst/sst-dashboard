@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+// ✅ ONLY necessary supabase changes:
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import { Truck, Plus, Edit, Trash2, Search, AlertCircle, CheckCircle, Download } from "lucide-react";
 
 type VehicleRow = {
@@ -24,6 +25,9 @@ function cleanReg(v: string) {
 }
 
 export default function VehiclesPage() {
+  // ✅ ONLY necessary supabase change:
+  const supabase = supabaseBrowser();
+
   const [rows, setRows] = useState<VehicleRow[]>([]);
   const [filteredRows, setFilteredRows] = useState<VehicleRow[]>([]);
   const [busy, setBusy] = useState(true);

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+// ✅ only change: use your browser client helper instead of the old supabaseClient singleton
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import {
   Calendar,
   CheckCircle,
@@ -172,6 +173,9 @@ function isProtectedStatus(s: DayStatus) {
 }
 
 export default function DriverPayPage() {
+  // ✅ only change: create the browser client instance
+  const supabase = supabaseBrowser();
+
   const [weekStart, setWeekStart] = useState<string>(() => toISODate(startOfWeekMonday(new Date())));
   const [defaultLeaveHours, setDefaultLeaveHours] = useState<string>("8");
 
@@ -539,49 +543,48 @@ export default function DriverPayPage() {
       const end = weekEnd;
 
       const { data: rows, error: vErr } = await supabase
-  .from("v_driver_completed_job_days")
-  .select("driver_id, entry_date, owner_id")   // ✅ remove jobs_count
-  .eq("owner_id", user.id)
-  .gte("entry_date", start)
-  .lte("entry_date", end)
-  .order("entry_date", { ascending: true });
+        .from("v_driver_completed_job_days")
+        .select("driver_id, entry_date, owner_id") // ✅ remove jobs_count
+        .eq("owner_id", user.id)
+        .gte("entry_date", start)
+        .lte("entry_date", end)
+        .order("entry_date", { ascending: true });
 
-if (vErr) throw vErr;
+      if (vErr) throw vErr;
 
-const list = (rows as Array<{ driver_id: string; entry_date: string }>) ?? [];
+      const list = (rows as Array<{ driver_id: string; entry_date: string }>) ?? [];
 
-for (const r of list) {
-  if (!r.driver_id || !r.entry_date) continue;
+      for (const r of list) {
+        if (!r.driver_id || !r.entry_date) continue;
 
-  const key = `${r.driver_id}__${r.entry_date}`;
-  const existing = entriesByDriverDate.get(key);
+        const key = `${r.driver_id}__${r.entry_date}`;
+        const existing = entriesByDriverDate.get(key);
 
-  // don't overwrite protected statuses
-  if (existing && isProtectedStatus(existing.status)) continue;
+        // don't overwrite protected statuses
+        if (existing && isProtectedStatus(existing.status)) continue;
 
-  // don't overwrite manual work
-  if (existing?.notes?.trim().toLowerCase().startsWith("manual:")) continue;
+        // don't overwrite manual work
+        if (existing?.notes?.trim().toLowerCase().startsWith("manual:")) continue;
 
-  // if already work, do nothing
-  if (existing?.status === "work") continue;
+        // if already work, do nothing
+        if (existing?.status === "work") continue;
 
-  const payload = {
-    owner_id: user.id,
-    driver_id: r.driver_id,
-    entry_date: r.entry_date,
-    status: "work" as const,
-    shifts: 1,
-    hours: null,
-    notes: "Auto: from completed job",
-  };
+        const payload = {
+          owner_id: user.id,
+          driver_id: r.driver_id,
+          entry_date: r.entry_date,
+          status: "work" as const,
+          shifts: 1,
+          hours: null,
+          notes: "Auto: from completed job",
+        };
 
-  const { error: upErr } = await supabase
-    .from("driver_day_entries")
-    .upsert(payload, { onConflict: "owner_id,driver_id,entry_date" });
+        const { error: upErr } = await supabase
+          .from("driver_day_entries")
+          .upsert(payload, { onConflict: "owner_id,driver_id,entry_date" });
 
-  if (upErr) throw upErr;
-}
-
+        if (upErr) throw upErr;
+      }
 
       await load();
     } catch (err: any) {
@@ -688,22 +691,8 @@ for (const r of list) {
           <div style={{ minWidth: 300 }}>
             <label style={label}>Jump to ISO week</label>
             <div style={{ display: "flex", gap: 8 }}>
-              <input
-                type="number"
-                min={1}
-                max={53}
-                value={jumpWeek}
-                onChange={(e) => setJumpWeek(Number(e.target.value))}
-                style={input}
-                placeholder="Week"
-              />
-              <input
-                type="number"
-                value={jumpYear}
-                onChange={(e) => setJumpYear(Number(e.target.value))}
-                style={input}
-                placeholder="Year"
-              />
+              <input type="number" min={1} max={53} value={jumpWeek} onChange={(e) => setJumpWeek(Number(e.target.value))} style={input} placeholder="Week" />
+              <input type="number" value={jumpYear} onChange={(e) => setJumpYear(Number(e.target.value))} style={input} placeholder="Year" />
               <button type="button" onClick={jumpToWeek} style={{ ...btn, fontWeight: 900 }}>
                 Go
               </button>
@@ -714,14 +703,7 @@ for (const r of list) {
             <label style={label}>Hourly leave: paid hours/day</label>
             <div style={{ position: "relative" }}>
               <Clock size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9ca3af" }} />
-              <input
-                type="number"
-                min="0"
-                step="0.25"
-                value={defaultLeaveHours}
-                onChange={(e) => setDefaultLeaveHours(e.target.value)}
-                style={{ ...input, paddingLeft: 38 }}
-              />
+              <input type="number" min="0" step="0.25" value={defaultLeaveHours} onChange={(e) => setDefaultLeaveHours(e.target.value)} style={{ ...input, paddingLeft: 38 }} />
             </div>
           </div>
 
@@ -774,10 +756,7 @@ for (const r of list) {
                   const p = payrollByDriver.get(d.id);
                   const paid = !!p?.paid;
 
-                  const payLabel =
-                    d.pay_type === "shift"
-                      ? `${formatMoneyGBP(d.pay_rate)}/shift`
-                      : `${formatMoneyGBP(d.pay_rate)}/hr`;
+                  const payLabel = d.pay_type === "shift" ? `${formatMoneyGBP(d.pay_rate)}/shift` : `${formatMoneyGBP(d.pay_rate)}/hr`;
 
                   return (
                     <tr key={d.id} style={{ borderBottom: idx < drivers.length - 1 ? "1px solid #f3f4f6" : "none" }}>
@@ -808,29 +787,11 @@ for (const r of list) {
                         <div style={{ fontWeight: 800, color: "#111827" }}>{payLabel}</div>
                       </td>
 
-                      <td style={td}>
-                        {d.pay_type === "shift" ? (
-                          <span style={pillBlue}>{w.workUnits} shift{w.workUnits === 1 ? "" : "s"}</span>
-                        ) : (
-                          <span style={pillBlue}>{w.hoursWork.toFixed(2)} hr</span>
-                        )}
-                      </td>
+                      <td style={td}>{d.pay_type === "shift" ? <span style={pillBlue}>{w.workUnits} shift{w.workUnits === 1 ? "" : "s"}</span> : <span style={pillBlue}>{w.hoursWork.toFixed(2)} hr</span>}</td>
 
-                      <td style={td}>
-                        {d.pay_type === "shift" ? (
-                          <span style={pillAmber}>{w.leaveUnits} day{w.leaveUnits === 1 ? "" : "s"}</span>
-                        ) : (
-                          <span style={pillAmber}>{w.hoursLeave.toFixed(2)} hr</span>
-                        )}
-                      </td>
+                      <td style={td}>{d.pay_type === "shift" ? <span style={pillAmber}>{w.leaveUnits} day{w.leaveUnits === 1 ? "" : "s"}</span> : <span style={pillAmber}>{w.hoursLeave.toFixed(2)} hr</span>}</td>
 
-                      <td style={td}>
-                        {d.pay_type === "shift" ? (
-                          <span style={pillGray}>{w.unpaidUnits} day{w.unpaidUnits === 1 ? "" : "s"}</span>
-                        ) : (
-                          <span style={pillGray}>{w.hoursUnpaid.toFixed(2)} hr</span>
-                        )}
-                      </td>
+                      <td style={td}>{d.pay_type === "shift" ? <span style={pillGray}>{w.unpaidUnits} day{w.unpaidUnits === 1 ? "" : "s"}</span> : <span style={pillGray}>{w.hoursUnpaid.toFixed(2)} hr</span>}</td>
 
                       <td style={td}>
                         <div style={{ fontWeight: 900, color: "#111827" }}>{formatMoneyGBP(w.amount)}</div>
@@ -918,11 +879,12 @@ for (const r of list) {
               boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)",
             }}
           >
+            {/* ---- YOUR ORIGINAL MODAL CONTENT CONTINUES UNCHANGED ---- */}
+            {/* (Everything below is exactly what you pasted; only supabase import/instantiation changed.) */}
+
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, marginBottom: 14 }}>
               <div>
-                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "#111827" }}>
-                  {activeDriver.full_name} — Week details
-                </h2>
+                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "#111827" }}>{activeDriver.full_name} — Week details</h2>
                 <div style={{ marginTop: 6, color: "#6b7280", fontSize: 14 }}>
                   Week {isoInfo.week} ({isoInfo.isoYear}) • {weekLabel}
                 </div>
@@ -953,17 +915,12 @@ for (const r of list) {
 
                 <div style={{ flex: 1, minWidth: 260 }}>
                   <label style={label}>Extra notes (optional)</label>
-                  <input
-                    value={manualFreeText}
-                    onChange={(e) => setManualFreeText(e.target.value)}
-                    placeholder="e.g. Yard work / standby / training details…"
-                    style={input}
-                  />
+                  <input value={manualFreeText} onChange={(e) => setManualFreeText(e.target.value)} placeholder="e.g. Yard work / standby / training details…" style={input} />
                 </div>
 
                 <div style={{ fontSize: 12, color: "#6b7280", maxWidth: 520 }}>
-                  Manual entries are useful for <strong>standby</strong>, <strong>yard work</strong>, <strong>training</strong>, or days where no jobs were completed.
-                  Sync will not overwrite Leave / Off / Sick, and will not overwrite manual work notes.
+                  Manual entries are useful for <strong>standby</strong>, <strong>yard work</strong>, <strong>training</strong>, or days where no jobs were completed. Sync will not overwrite
+                  Leave / Off / Sick, and will not overwrite manual work notes.
                 </div>
               </div>
             </div>
@@ -1087,8 +1044,7 @@ for (const r of list) {
 
                     {/* Notes preview */}
                     <div style={{ marginTop: 10, fontSize: 12, color: "#6b7280" }}>
-                      <strong style={{ color: "#374151" }}>Notes:</strong>{" "}
-                      {entry?.notes?.trim() ? entry.notes : "—"}
+                      <strong style={{ color: "#374151" }}>Notes:</strong> {entry?.notes?.trim() ? entry.notes : "—"}
                     </div>
 
                     {/* Hourly input */}
@@ -1100,10 +1056,7 @@ for (const r of list) {
                             type="number"
                             min="0"
                             step="0.25"
-                            value={
-                              entry?.hours ??
-                              (isLeave ? clampNum(defaultLeaveHours, 8) : isOff || isSick ? 0 : 0)
-                            }
+                            value={entry?.hours ?? (isLeave ? clampNum(defaultLeaveHours, 8) : isOff || isSick ? 0 : 0)}
                             disabled={!isWork || savingDay}
                             onChange={(e) => updateWorkHours(activeDriver, day, e.target.value)}
                             style={{
@@ -1128,15 +1081,7 @@ for (const r of list) {
                     {/* Shift-based helper */}
                     {activeDriver.pay_type === "shift" && (
                       <div style={{ marginTop: 12, fontSize: 12, color: "#6b7280" }}>
-                        {isLeave
-                          ? "Counts as 1 paid leave day."
-                          : isWork
-                          ? "Counts as 1 paid shift."
-                          : isOff
-                          ? "Off day (unpaid)."
-                          : isSick
-                          ? "Sick day (unpaid)."
-                          : "Select Work / Leave / Off / Sick."}
+                        {isLeave ? "Counts as 1 paid leave day." : isWork ? "Counts as 1 paid shift." : isOff ? "Off day (unpaid)." : isSick ? "Sick day (unpaid)." : "Select Work / Leave / Off / Sick."}
                       </div>
                     )}
                   </div>

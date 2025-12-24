@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import {
   Users,
   Truck,
@@ -26,6 +26,9 @@ type Counts = {
 };
 
 export default function ManagementHome() {
+  // ✅ cookie-aware supabase client (works correctly across custom domains)
+  const supabase = supabaseBrowser();
+
   const [counts, setCounts] = useState<Counts>({
     driversActive: null,
     vehiclesActiveOrTotal: null,
@@ -41,10 +44,7 @@ export default function ManagementHome() {
   useEffect(() => {
     let cancelled = false;
 
-    async function safeCount(opts: {
-      table: string;
-      where?: (q: any) => any;
-    }): Promise<{ count: number; error?: any }> {
+    async function safeCount(opts: { table: string; where?: (q: any) => any }): Promise<{ count: number; error?: any }> {
       try {
         let q = supabase.from(opts.table).select("id", { count: "exact", head: true });
         if (opts.where) q = opts.where(q);
@@ -60,6 +60,14 @@ export default function ManagementHome() {
       setCountError(null);
 
       try {
+        // ✅ Auth guard (prevents “auth session missing” weirdness on custom domain)
+        const { data: authData, error: authErr } = await supabase.auth.getUser();
+        if (authErr) throw authErr;
+        if (!authData?.user) {
+          window.location.href = "/login";
+          return;
+        }
+
         // Core counts (these tables definitely exist in your app)
         const driversReq = safeCount({
           table: "drivers",
@@ -86,11 +94,7 @@ export default function ManagementHome() {
           vehiclesCount = vehiclesTotal.count;
         }
 
-        const [driversRes, customersRes, trailersRes] = await Promise.all([
-          driversReq,
-          customersReq,
-          trailersReq,
-        ]);
+        const [driversRes, customersRes, trailersRes] = await Promise.all([driversReq, customersReq, trailersReq]);
 
         // OPTIONAL counts — only set them if your tables exist.
         // If you don't have these tables yet, they will quietly show "—" and not crash the page.
@@ -113,8 +117,7 @@ export default function ManagementHome() {
         });
 
         // If any "core" count fails (drivers/customers/trailers/vehicles), throw.
-        const firstCoreErr =
-          driversRes.error || customersRes.error || trailersRes.error || null;
+        const firstCoreErr = driversRes.error || customersRes.error || trailersRes.error || null;
         if (firstCoreErr) throw firstCoreErr;
 
         // If optional tables don't exist, don't treat as fatal; just show "—".
@@ -165,7 +168,7 @@ export default function ManagementHome() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [supabase]);
 
   const managementCards = useMemo(
     () => [
@@ -194,8 +197,7 @@ export default function ManagementHome() {
         icon: <Truck size={24} />,
         color: "#10b981",
         bgColor: "#d1fae5",
-        count:
-          counts.vehiclesActiveOrTotal == null ? "—" : `${counts.vehiclesActiveOrTotal} vehicles`,
+        count: counts.vehiclesActiveOrTotal == null ? "—" : `${counts.vehiclesActiveOrTotal} vehicles`,
       },
       {
         title: "Trailers",
@@ -231,8 +233,7 @@ export default function ManagementHome() {
         icon: <Wrench size={24} />,
         color: "#6366f1",
         bgColor: "#eef2ff",
-        count:
-          counts.maintenancePending == null ? "—" : `${counts.maintenancePending} pending`,
+        count: counts.maintenancePending == null ? "—" : `${counts.maintenancePending} pending`,
       },
       {
         title: "Documents",
@@ -281,14 +282,7 @@ export default function ManagementHome() {
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 20px" }}>
       {/* Header Section */}
       <div style={{ marginBottom: "18px" }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "8px",
-          }}
-        >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
           <h1 style={{ fontSize: "30px", fontWeight: 800, color: "#111827", margin: 0 }}>
             Management Console
           </h1>
@@ -306,14 +300,7 @@ export default function ManagementHome() {
           </div>
         </div>
 
-        <p
-          style={{
-            fontSize: "16px",
-            color: "#6b7280",
-            margin: "0 0 8px 0",
-            maxWidth: "600px",
-          }}
-        >
+        <p style={{ fontSize: "16px", color: "#6b7280", margin: "0 0 8px 0", maxWidth: "600px" }}>
           Manage your fleet, people, and compliance
         </p>
 
@@ -368,14 +355,10 @@ export default function ManagementHome() {
               e.currentTarget.style.transform = "translateY(0)";
             }}
           >
-            <div style={{ fontSize: "14px", color: "#6b7280", marginBottom: "8px" }}>
-              {stat.label}
-            </div>
+            <div style={{ fontSize: "14px", color: "#6b7280", marginBottom: "8px" }}>{stat.label}</div>
 
             <div style={{ display: "flex", alignItems: "baseline", gap: "8px", marginBottom: "4px" }}>
-              <span style={{ fontSize: "28px", fontWeight: 700, color: "#111827" }}>
-                {stat.value}
-              </span>
+              <span style={{ fontSize: "28px", fontWeight: 700, color: "#111827" }}>{stat.value}</span>
 
               {(index === 0 || index === 2) && (
                 <span
@@ -402,20 +385,11 @@ export default function ManagementHome() {
 
       {/* Main Grid */}
       <div style={{ marginBottom: "24px" }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "20px",
-          }}
-        >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
           <h2 style={{ fontSize: "20px", fontWeight: 700, color: "#111827", margin: 0 }}>
             Management Modules
           </h2>
-          <span style={{ fontSize: "14px", color: "#6b7280" }}>
-            {managementCards.length} modules available
-          </span>
+          <span style={{ fontSize: "14px", color: "#6b7280" }}>{managementCards.length} modules available</span>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "20px" }}>
@@ -427,7 +401,7 @@ export default function ManagementHome() {
                   border: "1px solid #e5e7eb",
                   borderRadius: "16px",
                   padding: "24px",
-                  height: "100%",
+                  height: "125%",
                   transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                   position: "relative",
                   overflow: "hidden",
@@ -477,15 +451,7 @@ export default function ManagementHome() {
                 </div>
 
                 <div style={{ position: "relative", zIndex: 1 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      marginBottom: "8px",
-                      gap: 12,
-                    }}
-                  >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px", gap: 12 }}>
                     <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#111827", margin: 0 }}>
                       {card.title}
                     </h3>
@@ -511,15 +477,7 @@ export default function ManagementHome() {
 
                   <div style={{ display: "flex", alignItems: "center", color: card.color, fontSize: "14px", fontWeight: 600 }}>
                     <span>Open module</span>
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      style={{ marginLeft: "8px" }}
-                    >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: "8px" }}>
                       <path d="M5 12h14M12 5l7 7-7 7" />
                     </svg>
                   </div>

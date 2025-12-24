@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import {
   AlertCircle,
   Calendar,
@@ -139,6 +139,9 @@ function isInProgressStatus(status: string | null | undefined) {
 }
 
 export default function OperationsDashboardPage() {
+  // ✅ Create browser Supabase client (cookie-aware, works on custom domain)
+  const supabase = supabaseBrowser();
+
   const pathname = usePathname();
   const isFinance = pathname === "/dashboard";
   const isOps = pathname === "/dashboard/operations";
@@ -174,6 +177,14 @@ export default function OperationsDashboardPage() {
     setError(null);
 
     try {
+      // ✅ Auth guard: if cookie/session missing, redirect to login
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      if (authErr) throw authErr;
+      if (!authData?.user) {
+        window.location.href = "/login";
+        return;
+      }
+
       // 1) Upcoming range: today -> next 3 days
       const { data: upcomingData, error: upcomingErr } = await supabase
         .from("v_jobs_open")
@@ -196,7 +207,9 @@ export default function OperationsDashboardPage() {
       if (inProgErr) throw inProgErr;
 
       const upcoming = (upcomingData as JobOpenRow[]) ?? [];
-      const inProgAll = ((inProgData as JobOpenRow[]) ?? []).filter((r) => isInProgressStatus(r.status));
+      const inProgAll = ((inProgData as JobOpenRow[]) ?? []).filter((r) =>
+        isInProgressStatus(r.status)
+      );
 
       // Merge + de-dupe by id (keeps in-progress even if outside date window)
       const map = new Map<string, JobOpenRow>();
@@ -245,7 +258,9 @@ export default function OperationsDashboardPage() {
   const classified = useMemo(() => {
     const inProgress = rows.filter((r) => isInProgressStatus(r.status));
 
-    const todayJobs = rows.filter((r) => r.job_date === todayISO && !isInProgressStatus(r.status));
+    const todayJobs = rows.filter(
+      (r) => r.job_date === todayISO && !isInProgressStatus(r.status)
+    );
 
     const upcoming = rows.filter((r) => {
       if (!r.job_date) return false;
@@ -264,11 +279,7 @@ export default function OperationsDashboardPage() {
     setError(null);
 
     try {
-      const { data, error } = await supabase
-        .from("job_stops")
-        .select("*")
-        .eq("job_id", row.id);
-
+      const { data, error } = await supabase.from("job_stops").select("*").eq("job_id", row.id);
       if (error) throw error;
 
       const list = ((data as JobStop[]) ?? []).slice();
@@ -291,15 +302,20 @@ export default function OperationsDashboardPage() {
   }
 
   const stopInfo = useMemo(() => {
-    if (!stops || stops.length === 0) return { pickup: null as JobStop | null, drop: null as JobStop | null };
+    if (!stops || stops.length === 0)
+      return { pickup: null as JobStop | null, drop: null as JobStop | null };
 
     const norm = (s: string | null | undefined) => (s ?? "").toLowerCase();
 
     const pickup =
-      stops.find((s) => norm(s.stop_type).includes("collect") || norm(s.stop_type).includes("pick")) ?? stops[0] ?? null;
+      stops.find((s) => norm(s.stop_type).includes("collect") || norm(s.stop_type).includes("pick")) ??
+      stops[0] ??
+      null;
 
     const drop =
-      [...stops].reverse().find((s) => norm(s.stop_type).includes("deliver") || norm(s.stop_type).includes("drop")) ??
+      [...stops]
+        .reverse()
+        .find((s) => norm(s.stop_type).includes("deliver") || norm(s.stop_type).includes("drop")) ??
       stops[stops.length - 1] ??
       null;
 
@@ -339,7 +355,16 @@ export default function OperationsDashboardPage() {
   return (
     <div style={{ maxWidth: 1300, margin: "0 auto", padding: "24px 20px" }}>
       {/* Combined Header with Toggle Buttons */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "start",
+          gap: 12,
+          flexWrap: "wrap",
+          marginBottom: 24,
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div
             style={{
@@ -356,7 +381,9 @@ export default function OperationsDashboardPage() {
           </div>
 
           <div>
-            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900, color: "#111827" }}>Operations</h1>
+            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900, color: "#111827" }}>
+              Operations
+            </h1>
             <p style={{ margin: "6px 0 0 0", color: "#6b7280" }}>
               Jobs in progress + upcoming jobs + weekly load volume
             </p>
@@ -394,10 +421,16 @@ export default function OperationsDashboardPage() {
           </div>
         </div>
 
-        {/* Status and Refresh button */}
-        <div style={{ display: "flex", gap: 17, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-          
-
+        {/* Refresh button */}
+        <div
+          style={{
+            display: "flex",
+            gap: 17,
+            alignItems: "center",
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
+          }}
+        >
           <button type="button" onClick={load} style={{ ...btn, fontWeight: 900, height: 44 }}>
             Refresh
           </button>
@@ -406,21 +439,48 @@ export default function OperationsDashboardPage() {
 
       {/* Error */}
       {error && (
-        <div style={{ marginBottom: 14, padding: 14, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, display: "flex", gap: 10 }}>
+        <div
+          style={{
+            marginBottom: 14,
+            padding: 14,
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
+            borderRadius: 12,
+            display: "flex",
+            gap: 10,
+          }}
+        >
           <AlertCircle size={20} color="#dc2626" />
           <div style={{ color: "#991b1b" }}>{error}</div>
         </div>
       )}
 
       {busy ? (
-        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 14, padding: 18, display: "flex", alignItems: "center", gap: 10 }}>
+        <div
+          style={{
+            background: "white",
+            border: "1px solid #e5e7eb",
+            borderRadius: 14,
+            padding: 18,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
           <Loader2 className="spin" size={18} /> Loading…
           <style>{`.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         </div>
       ) : (
         <>
           {/* Sections */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 12, marginBottom: 14 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(12, 1fr)",
+              gap: 12,
+              marginBottom: 14,
+            }}
+          >
             <Section
               title="In progress"
               subtitle=""
@@ -452,7 +512,7 @@ export default function OperationsDashboardPage() {
             />
           </div>
 
-          {/* Weekly chart (simplified) */}
+          {/* Weekly chart */}
           <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 14, padding: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
               <div style={{ fontWeight: 950, color: "#111827", display: "flex", alignItems: "center", gap: 10 }}>
@@ -465,9 +525,25 @@ export default function OperationsDashboardPage() {
               {weeklyBars.weeks.map((w) => {
                 const pct = Math.round((w.count / weeklyBars.max) * 100);
                 return (
-                  <div key={w.key} style={{ display: "grid", gridTemplateColumns: "170px 1fr 60px", gap: 10, alignItems: "center" }}>
+                  <div
+                    key={w.key}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "170px 1fr 60px",
+                      gap: 10,
+                      alignItems: "center",
+                    }}
+                  >
                     <div style={{ fontSize: 12, fontWeight: 900, color: "#374151" }}>{w.label}</div>
-                    <div style={{ height: 12, background: "#f3f4f6", borderRadius: 999, overflow: "hidden", border: "1px solid #e5e7eb" }}>
+                    <div
+                      style={{
+                        height: 12,
+                        background: "#f3f4f6",
+                        borderRadius: 999,
+                        overflow: "hidden",
+                        border: "1px solid #e5e7eb",
+                      }}
+                    >
                       <div style={{ height: "100%", width: `${pct}%`, background: "#111827" }} />
                     </div>
                     <div style={{ textAlign: "right", fontWeight: 950, color: "#111827" }}>{w.count}</div>
@@ -573,7 +649,7 @@ export default function OperationsDashboardPage() {
                       </div>
                     </div>
 
-                    {/* All stops (including intermediate) */}
+                    {/* All stops */}
                     {stops.map((s, idx) => {
                       const addr = safeText(s.name ?? null, s.address ?? null, s.city ?? null, s.postcode ?? null);
                       return (
@@ -673,11 +749,7 @@ export default function OperationsDashboardPage() {
                         href={href}
                         target="_blank"
                         rel="noreferrer"
-                        style={{
-                          ...btn,
-                          textDecoration: "none",
-                          fontWeight: 900,
-                        }}
+                        style={{ ...btn, textDecoration: "none", fontWeight: 900 }}
                       >
                         <Navigation size={16} />
                         Open route in Google Maps
@@ -685,8 +757,6 @@ export default function OperationsDashboardPage() {
                     );
                   })()}
                 </div>
-
-                
               </div>
             </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import RouteModal, { RouteStopFinal } from "@/components/RouteModal";
 
 type Option = { id: string; label: string };
@@ -28,6 +28,9 @@ const statuses = [
 
 export default function AddJobModal({ open, onClose, onSaved, job }: Props) {
   const isEdit = !!job?.id;
+
+  // ✅ Use cookie-based Supabase client (works with middleware + custom domain)
+  const supabase = supabaseBrowser();
 
   // Job fields
   const [jobRef, setJobRef] = useState("");
@@ -75,7 +78,7 @@ export default function AddJobModal({ open, onClose, onSaved, job }: Props) {
       }
       setUserEmail(data?.user?.email ?? "(not signed in - anon)");
     })();
-  }, [open]);
+  }, [open, supabase]);
 
   // 2) Load dropdown options whenever modal opens
   useEffect(() => {
@@ -117,7 +120,7 @@ export default function AddJobModal({ open, onClose, onSaved, job }: Props) {
       setOptionsBusy(false);
       setError(e?.message ?? "Failed to load dropdown options");
     });
-  }, [open]);
+  }, [open, supabase]);
 
   // 3) Prefill fields when opening (Add vs Edit)
   useEffect(() => {
@@ -195,7 +198,7 @@ export default function AddJobModal({ open, onClose, onSaved, job }: Props) {
       setRouteStops([]);
       setRouteMiles(null);
     }
-  }, [open, isEdit, job?.id]);
+  }, [open, isEdit, job?.id, supabase]);
 
   // Helper: parse amount safely (supports comma decimal too)
   function parseAmountToNumber(v: string): number {
@@ -402,7 +405,6 @@ export default function AddJobModal({ open, onClose, onSaved, job }: Props) {
 
             <div>
               <label>Amount (£) *</label>
-              {/* ✅ string + inputMode decimal = allows 111.32 */}
               <input
                 type="text"
                 inputMode="decimal"
@@ -446,7 +448,6 @@ export default function AddJobModal({ open, onClose, onSaved, job }: Props) {
               </select>
             </div>
 
-            {/* Route (optional) */}
             <div style={{ gridColumn: "1 / -1", padding: 12, background: "#f8fafc", borderRadius: 10 }}>
               <button
                 type="button"

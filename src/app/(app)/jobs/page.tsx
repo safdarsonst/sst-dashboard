@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import AddJobModal from "@/components/AddJobModal";
 
 type JobRow = {
@@ -33,6 +33,9 @@ const statusColors: Record<string, { bg: string; text: string }> = {
 };
 
 export default function JobsPage() {
+  // ✅ cookie-aware client instance
+  const supabase = supabaseBrowser();
+
   const [rows, setRows] = useState<JobRow[]>([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +54,14 @@ export default function JobsPage() {
     setBusy(true);
 
     try {
+      // ✅ Auth guard (prevents “auth session missing” weirdness on custom domain)
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      if (authErr) throw authErr;
+      if (!authData?.user) {
+        window.location.href = "/login";
+        return;
+      }
+
       // 1) jobs table (authoritative IDs)
       const { data: job, error: jobErr } = await supabase
         .from("jobs")
@@ -106,23 +117,35 @@ export default function JobsPage() {
     setBusy(true);
     setError(null);
 
-    const { data, error } = await supabase
-      .from("v_jobs_open")
-      .select("*")
-      .order("job_date", { ascending: true })
-      .order("next_stop_time", { ascending: true, nullsFirst: false });
+    try {
+      // ✅ Auth guard
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      if (authErr) throw authErr;
+      if (!authData?.user) {
+        window.location.href = "/login";
+        return;
+      }
 
-    setBusy(false);
+      const { data, error } = await supabase
+        .from("v_jobs_open")
+        .select("*")
+        .order("job_date", { ascending: true })
+        .order("next_stop_time", { ascending: true, nullsFirst: false });
 
-    if (error) {
-      setError(error.message);
-      return;
+      if (error) throw error;
+
+      setRows((data as JobRow[]) ?? []);
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to load jobs.");
+      setRows([]);
+    } finally {
+      setBusy(false);
     }
-    setRows((data as JobRow[]) ?? []);
   }
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**
@@ -195,7 +218,9 @@ export default function JobsPage() {
         }}
       >
         <div>
-          <h1 style={{ fontSize: "28px", fontWeight: 700, color: "#111827", marginBottom: "4px" }}>Jobs</h1>
+          <h1 style={{ fontSize: "28px", fontWeight: 700, color: "#111827", marginBottom: "4px" }}>
+            Jobs
+          </h1>
           <p style={{ fontSize: "14px", color: "#6b7280", margin: 0 }}>
             {rows.length} job{rows.length !== 1 ? "s" : ""} in the system
           </p>
@@ -218,6 +243,7 @@ export default function JobsPage() {
             transition: "all 0.2s ease",
             boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
           }}
+          type="button"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 5v14M5 12h14" />
@@ -245,24 +271,34 @@ export default function JobsPage() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
-                  {["Ref", "Date", "Customer", "Status", "Terms", "Amount", "Driver", "Vehicle", "Miles", "£/mile", "Actions"].map(
-                    (h) => (
-                      <th
-                        key={h}
-                        style={{
-                          padding: "16px 12px",
-                          textAlign: "left",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          color: "#374151",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                        }}
-                      >
-                        {h}
-                      </th>
-                    )
-                  )}
+                  {[
+                    "Ref",
+                    "Date",
+                    "Customer",
+                    "Status",
+                    "Terms",
+                    "Amount",
+                    "Driver",
+                    "Vehicle",
+                    "Miles",
+                    "£/mile",
+                    "Actions",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      style={{
+                        padding: "16px 12px",
+                        textAlign: "left",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        color: "#374151",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                      }}
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
 
@@ -275,9 +311,15 @@ export default function JobsPage() {
                       transition: "background 0.2s ease",
                     }}
                   >
-                    <td style={{ padding: "16px 12px", fontWeight: 600, color: "#111827" }}>{r.job_reference}</td>
-                    <td style={{ padding: "16px 12px", color: "#374151", fontSize: "14px" }}>{formatDate(r.job_date)}</td>
-                    <td style={{ padding: "16px 12px", color: "#374151", fontSize: "14px" }}>{r.customer_name}</td>
+                    <td style={{ padding: "16px 12px", fontWeight: 600, color: "#111827" }}>
+                      {r.job_reference}
+                    </td>
+                    <td style={{ padding: "16px 12px", color: "#374151", fontSize: "14px" }}>
+                      {formatDate(r.job_date)}
+                    </td>
+                    <td style={{ padding: "16px 12px", color: "#374151", fontSize: "14px" }}>
+                      {r.customer_name}
+                    </td>
 
                     <td style={{ padding: "16px 12px" }}>
                       <span
@@ -305,8 +347,12 @@ export default function JobsPage() {
                       {formatCurrencySmart(r.agreed_amount)}
                     </td>
 
-                    <td style={{ padding: "16px 12px", color: "#374151", fontSize: "14px" }}>{r.driver_name ?? "-"}</td>
-                    <td style={{ padding: "16px 12px", color: "#374151", fontSize: "14px" }}>{r.vehicle_reg ?? "-"}</td>
+                    <td style={{ padding: "16px 12px", color: "#374151", fontSize: "14px" }}>
+                      {r.driver_name ?? "-"}
+                    </td>
+                    <td style={{ padding: "16px 12px", color: "#374151", fontSize: "14px" }}>
+                      {r.vehicle_reg ?? "-"}
+                    </td>
 
                     <td style={{ padding: "16px 12px", color: "#374151", fontSize: "14px" }}>
                       {r.total_distance_miles != null ? `${r.total_distance_miles} mi` : "-"}
@@ -332,8 +378,16 @@ export default function JobsPage() {
                           justifyContent: "center",
                           gap: 6,
                         }}
+                        type="button"
                       >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                         </svg>

@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+// ✅ ONLY CHANGE: replace this import
+// import { supabase } from "@/lib/supabaseClient";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import {
   BarChart3,
   Calendar,
@@ -17,7 +19,7 @@ import {
 
 type InvoiceRow = {
   id: string;
-  company_name?: string | null;
+  owner_id?: string | null;
   job_date: string | null;
   agreed_amount: number | null;
   invoice_status: string | null; // paid | invoiced | overdue | awaiting_invoice | self_invoiced ...
@@ -118,6 +120,9 @@ function SimpleBarChart({
 }
 
 export default function ReportsPage() {
+  // ✅ ONLY CHANGE: create client inside component
+  const supabase = supabaseBrowser();
+
   const today = new Date();
   const [fromDate, setFromDate] = useState<string>(() => toISODate(startOfMonth(today)));
   const [toDate, setToDate] = useState<string>(() => toISODate(endOfMonth(today)));

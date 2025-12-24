@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import Image from "next/image";
-import { supabase } from "@/lib/supabaseClient";
-import { Banknote, CloudCogIcon, CloudFog, Cog, CogIcon, GitCommitVerticalIcon, Receipt, Wallet, WalletCardsIcon } from "lucide-react";
+import { supabaseBrowser } from "@/lib/supabase/browser";
+import { Cog, Wallet } from "lucide-react";
 
 type NavItem = {
   label: string;
@@ -15,7 +15,6 @@ type NavItem = {
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
 
   const [collapsed, setCollapsed] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -26,7 +25,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       { label: "Jobs", href: "/jobs", icon: <IconBriefcase /> },
       { label: "Invoices", href: "/invoices", icon: <IconInvoice /> },
       { label: "Paid", href: "/paid", icon: <Wallet /> },
-      { label: "Manage", href: "/manage", icon: <Cog/> }, // ✅ no 404
+      { label: "Manage", href: "/manage", icon: <Cog /> },
     ],
     []
   );
@@ -34,11 +33,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   async function logout() {
     try {
       setLoggingOut(true);
+      const supabase = supabaseBrowser();
       await supabase.auth.signOut();
     } finally {
       setLoggingOut(false);
-      router.replace("/login");
-      router.refresh();
+      // Hard navigation so middleware sees cookie changes immediately
+      window.location.href = "/login";
     }
   }
 
@@ -47,7 +47,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <aside style={{ ...styles.sidebar, width: collapsed ? 72 : 260 }}>
         <div style={styles.brandRow}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }}>
-            {/* ✅ PNG only, no blue box */}
             <div style={styles.logo}>
               <Image src="/SST.png" alt="SST" width={28} height={28} priority />
             </div>
@@ -178,7 +177,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 36,
     height: 36,
     borderRadius: 10,
-    background: "transparent", // ✅ no blue
+    background: "transparent",
     display: "grid",
     placeItems: "center",
     overflow: "hidden",
@@ -297,14 +296,6 @@ function IconInvoice() {
       <path d="M9 7h6" />
       <path d="M9 11h6" />
       <path d="M9 15h4" />
-    </svg>
-  );
-}
-function IconSettings() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
-      <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2 2 0 0 1-1.42 3.42h-.06a2 2 0 0 1-1.42-.59l-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.08 1.64V21a2 2 0 0 1-4 0v-.06a1.8 1.8 0 0 0-1.08-1.64 1.8 1.8 0 0 0-1.98.36l-.04.04a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.04-.04A1.8 1.8 0 0 0 4.6 15a1.8 1.8 0 0 0-1.64-1.08H2a2 2 0 0 1 0-4h.06A1.8 1.8 0 0 0 3.7 8.84a1.8 1.8 0 0 0-.36-1.98l-.04-.04A2 2 0 0 1 4.72 3.4h.06a2 2 0 0 1 1.42.59l.04.04a1.8 1.8 0 0 0 1.98.36A1.8 1.8 0 0 0 9.3 2.8V2a2 2 0 0 1 4 0v.06a1.8 1.8 0 0 0 1.08 1.64 1.8 1.8 0 0 0 1.98-.36l.04-.04A2 2 0 0 1 20.6 4.72v.06a2 2 0 0 1-.59 1.42l-.04.04a1.8 1.8 0 0 0-.36 1.98A1.8 1.8 0 0 0 21.2 9.3H22a2 2 0 0 1 0 4h-.06A1.8 1.8 0 0 0 19.4 15z" />
     </svg>
   );
 }

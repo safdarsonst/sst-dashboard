@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AlertCircle, CheckCircle, Search } from "lucide-react";
 
 type InvoiceStatus = "awaiting_invoice" | "invoiced" | "paid" | "self_invoiced";
@@ -42,44 +42,65 @@ function formatDate(d: string | null | undefined) {
 function formatDateTime(d: string | null | undefined) {
   if (!d) return "-";
   const dt = new Date(d);
-  return dt.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return dt.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default function InvoicesPage() {
+  // ✅ cookie-aware client (fixes custom domain session issues)
+  const supabase = supabaseBrowser();
+
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "awaiting_invoice" | "invoiced" | "self_invoiced" | "overdue">("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "awaiting_invoice" | "invoiced" | "self_invoiced" | "overdue"
+  >("all");
 
   async function load() {
     setBusy(true);
     setError(null);
 
-    // show completed loads that are NOT paid
-    const { data, error } = await supabase
-      .from("v_invoices")
-      .select(
-        "id, job_reference, job_date, customer_name, driver_name, vehicle_reg, trailer_identifier, agreed_amount, invoice_terms, invoice_status, invoice_number, invoiced_at, paid_at, self_invoiced, due_date, is_overdue"
-      )
-      .neq("invoice_status", "paid")
-      .order("job_date", { ascending: false });
+    try {
+      // ✅ Auth guard
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      if (authErr) throw authErr;
+      if (!authData?.user) {
+        window.location.href = "/login";
+        return;
+      }
 
-    setBusy(false);
+      // show completed loads that are NOT paid
+      const { data, error } = await supabase
+        .from("v_invoices")
+        .select(
+          "id, job_reference, job_date, customer_name, driver_name, vehicle_reg, trailer_identifier, agreed_amount, invoice_terms, invoice_status, invoice_number, invoiced_at, paid_at, self_invoiced, due_date, is_overdue"
+        )
+        .neq("invoice_status", "paid")
+        .order("job_date", { ascending: false });
 
-    if (error) {
-      setError(error.message);
+      if (error) throw error;
+
+      setRows((data as Row[]) ?? []);
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to load invoices.");
       setRows([]);
-      return;
+    } finally {
+      setBusy(false);
     }
-
-    setRows((data as Row[]) ?? []);
   }
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filtered = useMemo(() => {
@@ -118,10 +139,16 @@ export default function InvoicesPage() {
       .filter((r) => (r.invoice_status ?? "awaiting_invoice") === "awaiting_invoice")
       .reduce((s, r) => s + Number(r.agreed_amount ?? 0), 0);
 
-    const overdue = rows.filter((r) => !!r.is_overdue).reduce((s, r) => s + Number(r.agreed_amount ?? 0), 0);
+    const overdue = rows
+      .filter((r) => !!r.is_overdue)
+      .reduce((s, r) => s + Number(r.agreed_amount ?? 0), 0);
 
     const invoiced = rows
-      .filter((r) => (r.invoice_status ?? "awaiting_invoice") === "invoiced" || (r.invoice_status ?? "") === "self_invoiced")
+      .filter(
+        (r) =>
+          (r.invoice_status ?? "awaiting_invoice") === "invoiced" ||
+          (r.invoice_status ?? "") === "self_invoiced"
+      )
       .reduce((s, r) => s + Number(r.agreed_amount ?? 0), 0);
 
     return { awaiting, overdue, invoiced };
@@ -132,8 +159,13 @@ export default function InvoicesPage() {
     setError(null);
 
     try {
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      if (authErr) throw authErr;
+      if (!authData?.user) throw new Error("Auth session missing. Please log in again.");
+
       const { error } = await supabase.from("jobs").update(patch).eq("id", id);
       if (error) throw error;
+
       await load();
     } catch (e: any) {
       setError(e?.message ?? "Failed to update job.");
@@ -189,24 +221,62 @@ export default function InvoicesPage() {
 
   return (
     <div style={{ maxWidth: 1300, margin: "0 auto", padding: "24px 20px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", marginBottom: 14 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "end",
+          marginBottom: 14,
+        }}
+      >
         <div>
-          <h1 style={{ fontSize: 30, fontWeight: 900, margin: 0, color: "#111827" }}>Invoices</h1>
-          <p style={{ margin: "6px 0 0 0", color: "#6b7280" }}>Completed loads that still need invoicing / payment tracking.</p>
+          <h1 style={{ fontSize: 30, fontWeight: 900, margin: 0, color: "#111827" }}>
+            Invoices
+          </h1>
+          <p style={{ margin: "6px 0 0 0", color: "#6b7280" }}>
+            Completed loads that still need invoicing / payment tracking.
+          </p>
         </div>
       </div>
 
       {/* Totals */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 14 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 12,
+          marginBottom: 14,
+        }}
+      >
         <StatCard title="Awaiting invoice" value={moneyGBP(totals.awaiting)} hint="Not invoiced yet" />
         <StatCard title="Overdue" value={moneyGBP(totals.overdue)} hint="Past due date" danger />
         <StatCard title="Invoiced (unpaid)" value={moneyGBP(totals.invoiced)} hint="Sent but not paid" />
       </div>
 
       {/* Search + Filter */}
-      <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 14, padding: 14, marginBottom: 14, display: "flex", gap: 12, alignItems: "center" }}>
+      <div
+        style={{
+          background: "white",
+          border: "1px solid #e5e7eb",
+          borderRadius: 14,
+          padding: 14,
+          marginBottom: 14,
+          display: "flex",
+          gap: 12,
+          alignItems: "center",
+        }}
+      >
         <div style={{ position: "relative", flex: 1 }}>
-          <Search size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9ca3af" }} />
+          <Search
+            size={18}
+            style={{
+              position: "absolute",
+              left: 12,
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "#9ca3af",
+            }}
+          />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -227,7 +297,13 @@ export default function InvoicesPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as any)}
-          style={{ padding: "12px 12px", borderRadius: 10, border: "1px solid #d1d5db", background: "white", fontSize: 14 }}
+          style={{
+            padding: "12px 12px",
+            borderRadius: 10,
+            border: "1px solid #d1d5db",
+            background: "white",
+            fontSize: 14,
+          }}
         >
           <option value="all">All</option>
           <option value="awaiting_invoice">Awaiting invoice</option>
@@ -238,7 +314,17 @@ export default function InvoicesPage() {
       </div>
 
       {error && (
-        <div style={{ marginBottom: 14, padding: 14, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, display: "flex", gap: 10 }}>
+        <div
+          style={{
+            marginBottom: 14,
+            padding: 14,
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
+            borderRadius: 12,
+            display: "flex",
+            gap: 10,
+          }}
+        >
           <AlertCircle size={20} color="#dc2626" />
           <div style={{ color: "#991b1b" }}>{error}</div>
         </div>
@@ -252,23 +338,25 @@ export default function InvoicesPage() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: "#f8fafc", borderBottom: "2px solid #e5e7eb" }}>
-                  {["Job", "Customer", "Driver / Vehicle", "Amount", "Status", "Invoice No", "Invoiced", "Due", "Actions"].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        padding: "14px 16px",
-                        textAlign: "left",
-                        fontSize: 12,
-                        fontWeight: 900,
-                        color: "#374151",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
+                  {["Job", "Customer", "Driver / Vehicle", "Amount", "Status", "Invoice No", "Invoiced", "Due", "Actions"].map(
+                    (h) => (
+                      <th
+                        key={h}
+                        style={{
+                          padding: "14px 16px",
+                          textAlign: "left",
+                          fontSize: 12,
+                          fontWeight: 900,
+                          color: "#374151",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {h}
+                      </th>
+                    )
+                  )}
                 </tr>
               </thead>
 
@@ -278,13 +366,18 @@ export default function InvoicesPage() {
                   const overdue = !!r.is_overdue;
 
                   return (
-                    <tr key={r.id} style={{ borderBottom: idx < filtered.length - 1 ? "1px solid #f3f4f6" : "none" }}>
+                    <tr
+                      key={r.id}
+                      style={{ borderBottom: idx < filtered.length - 1 ? "1px solid #f3f4f6" : "none" }}
+                    >
                       <td style={{ padding: "14px 16px" }}>
                         <div style={{ fontWeight: 900, color: "#111827" }}>{r.job_reference}</div>
                         <div style={{ fontSize: 12, color: "#6b7280" }}>{formatDate(r.job_date)}</div>
                       </td>
 
-                      <td style={{ padding: "14px 16px", fontWeight: 700, color: "#111827" }}>{r.customer_name ?? "-"}</td>
+                      <td style={{ padding: "14px 16px", fontWeight: 700, color: "#111827" }}>
+                        {r.customer_name ?? "-"}
+                      </td>
 
                       <td style={{ padding: "14px 16px" }}>
                         <div style={{ fontWeight: 700, color: "#111827" }}>{r.driver_name ?? "-"}</div>
@@ -294,7 +387,9 @@ export default function InvoicesPage() {
                         </div>
                       </td>
 
-                      <td style={{ padding: "14px 16px", fontWeight: 900, color: "#111827" }}>{moneyGBP(Number(r.agreed_amount ?? 0))}</td>
+                      <td style={{ padding: "14px 16px", fontWeight: 900, color: "#111827" }}>
+                        {moneyGBP(Number(r.agreed_amount ?? 0))}
+                      </td>
 
                       <td style={{ padding: "14px 16px" }}>
                         <span
@@ -339,16 +434,36 @@ export default function InvoicesPage() {
 
                       <td style={{ padding: "14px 16px" }}>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <button disabled={savingId === r.id} onClick={() => markAwaitingInvoice(r)} style={btnSecondary} type="button">
+                          <button
+                            disabled={savingId === r.id}
+                            onClick={() => markAwaitingInvoice(r)}
+                            style={btnSecondary}
+                            type="button"
+                          >
                             Awaiting
                           </button>
-                          <button disabled={savingId === r.id} onClick={() => markInvoiced(r)} style={btnPrimary} type="button">
+                          <button
+                            disabled={savingId === r.id}
+                            onClick={() => markInvoiced(r)}
+                            style={btnPrimary}
+                            type="button"
+                          >
                             Invoiced
                           </button>
-                          <button disabled={savingId === r.id} onClick={() => markSelfInvoiced(r)} style={btnPurple} type="button">
+                          <button
+                            disabled={savingId === r.id}
+                            onClick={() => markSelfInvoiced(r)}
+                            style={btnPurple}
+                            type="button"
+                          >
                             Self
                           </button>
-                          <button disabled={savingId === r.id} onClick={() => markPaid(r)} style={btnSuccess} type="button">
+                          <button
+                            disabled={savingId === r.id}
+                            onClick={() => markPaid(r)}
+                            style={btnSuccess}
+                            type="button"
+                          >
                             <CheckCircle size={14} /> Paid
                           </button>
                         </div>
@@ -373,11 +488,23 @@ export default function InvoicesPage() {
   );
 }
 
-function StatCard({ title, value, hint, danger }: { title: string; value: string; hint: string; danger?: boolean }) {
+function StatCard({
+  title,
+  value,
+  hint,
+  danger,
+}: {
+  title: string;
+  value: string;
+  hint: string;
+  danger?: boolean;
+}) {
   return (
     <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 14, padding: 14 }}>
       <div style={{ fontSize: 13, color: "#6b7280", fontWeight: 800 }}>{title}</div>
-      <div style={{ fontSize: 24, fontWeight: 900, color: danger ? "#b91c1c" : "#111827", marginTop: 6 }}>{value}</div>
+      <div style={{ fontSize: 24, fontWeight: 900, color: danger ? "#b91c1c" : "#111827", marginTop: 6 }}>
+        {value}
+      </div>
       <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{hint}</div>
     </div>
   );

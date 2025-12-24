@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AlertCircle, CheckCircle, Save, Shield } from "lucide-react";
 
 type VehicleRow = {
@@ -11,9 +11,9 @@ type VehicleRow = {
   model: string | null;
   active: boolean | null;
 
-  mot_due: string | null;        // date (YYYY-MM-DD)
-  tax_due: string | null;        // date
-  insurance_due: string | null;  // date
+  mot_due: string | null; // date (YYYY-MM-DD)
+  tax_due: string | null; // date
+  insurance_due: string | null; // date
   service_due_date: string | null; // date
 
   created_at?: string | null;
@@ -35,7 +35,6 @@ function upper(v: string | null | undefined) {
 
 function daysUntil(dateStr: string | null) {
   if (!dateStr) return null;
-  // dateStr is YYYY-MM-DD from Postgres date
   const target = new Date(dateStr + "T00:00:00");
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -45,26 +44,16 @@ function daysUntil(dateStr: string | null) {
 
 function dueChip(dateStr: string | null) {
   const d = daysUntil(dateStr);
-  if (d === null) {
-    return { label: "Not set", bg: "#f3f4f6", fg: "#374151", border: "#e5e7eb" };
-  }
-  if (d < 0) {
-    return { label: `Overdue (${Math.abs(d)}d)`, bg: "#fef2f2", fg: "#991b1b", border: "#fecaca" };
-  }
-  if (d <= 30) {
-    return { label: `Due soon (${d}d)`, bg: "#fff7ed", fg: "#9a3412", border: "#fed7aa" };
-  }
+  if (d === null) return { label: "Not set", bg: "#f3f4f6", fg: "#374151", border: "#e5e7eb" };
+  if (d < 0) return { label: `Overdue (${Math.abs(d)}d)`, bg: "#fef2f2", fg: "#991b1b", border: "#fecaca" };
+  if (d <= 30) return { label: `Due soon (${d}d)`, bg: "#fff7ed", fg: "#9a3412", border: "#fed7aa" };
   return { label: `OK (${d}d)`, bg: "#ecfdf5", fg: "#065f46", border: "#bbf7d0" };
 }
 
-function formatDate(dateStr: string | null) {
-  if (!dateStr) return "";
-  // Render as UK date
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-}
-
 export default function CompliancePage() {
+  // ✅ cookie-aware supabase client (good for custom domain)
+  const supabase = supabaseBrowser();
+
   const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
   const [trailers, setTrailers] = useState<TrailerRow[]>([]);
   const [busy, setBusy] = useState(true);
@@ -75,18 +64,32 @@ export default function CompliancePage() {
   // Local editable drafts: key = `${kind}:${id}`
   const [drafts, setDrafts] = useState<Record<string, any>>({});
 
+  async function ensureAuth() {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) throw error;
+    if (!data?.user) {
+      window.location.href = "/login";
+      return false;
+    }
+    return true;
+  }
+
   async function load() {
     setBusy(true);
     setError(null);
     setSuccess(null);
 
     try {
+      const ok = await ensureAuth();
+      if (!ok) return;
+
       const [vRes, tRes] = await Promise.all([
         supabase
           .from("vehicles")
           .select("id, registration, make, model, active, mot_due, tax_due, insurance_due, service_due_date, created_at")
           .eq("active", true)
           .order("registration", { ascending: true }),
+
         supabase
           .from("trailers")
           .select("id, identifier, active, mot_due, created_at")
@@ -113,6 +116,7 @@ export default function CompliancePage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const summary = useMemo(() => {
@@ -168,6 +172,9 @@ export default function CompliancePage() {
     setSuccess(null);
 
     try {
+      const ok = await ensureAuth();
+      if (!ok) return;
+
       const k = draftKey(kind, row.id);
       const d = drafts[k];
       if (!d || Object.keys(d).length === 0) return;
@@ -175,7 +182,7 @@ export default function CompliancePage() {
       // Normalize: empty string => null (so you can clear dates)
       const payload: any = {};
       for (const [field, value] of Object.entries(d)) {
-        const v = (value as string).trim();
+        const v = String(value ?? "").trim();
         payload[field] = v ? v : null;
       }
 
@@ -414,9 +421,7 @@ export default function CompliancePage() {
             </div>
           </section>
 
-          <p style={{ fontSize: 12, color: "#6b7280" }}>
-            Tip: Leave a date empty to clear it, then hit Save.
-          </p>
+          <p style={{ fontSize: 12, color: "#6b7280" }}>Tip: Leave a date empty to clear it, then hit Save.</p>
         </>
       )}
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import { Plus, Edit, Trash2, Search, AlertCircle, CheckCircle } from "lucide-react";
 
 type CustomerRow = {
@@ -50,6 +50,8 @@ function cleanPhoneOptional(v: string) {
 }
 
 export default function CustomersPage() {
+  const supabase = supabaseBrowser();
+
   const [rows, setRows] = useState<CustomerRow[]>([]);
   const [filteredRows, setFilteredRows] = useState<CustomerRow[]>([]);
   const [busy, setBusy] = useState(true);
@@ -79,9 +81,7 @@ export default function CustomersPage() {
 
     const { data, error } = await supabase
       .from("customers")
-      .select(
-        "id, company_name, billing_address, email, phone, default_invoice_terms, payment_notes, active, created_at"
-      )
+      .select("id, company_name, billing_address, email, phone, default_invoice_terms, payment_notes, active, created_at")
       .order("active", { ascending: false })
       .order("company_name", { ascending: true });
 
@@ -101,6 +101,7 @@ export default function CustomersPage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

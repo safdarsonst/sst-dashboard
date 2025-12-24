@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+// ✅ ONLY supabase change:
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import { Plus, Edit, Trash2, Search, AlertCircle, CheckCircle } from "lucide-react";
 
 type TrailerRow = {
@@ -38,6 +39,9 @@ function cleanYearOptional(v: string) {
 }
 
 export default function TrailersPage() {
+  // ✅ ONLY supabase change:
+  const supabase = supabaseBrowser();
+
   const [rows, setRows] = useState<TrailerRow[]>([]);
   const [filteredRows, setFilteredRows] = useState<TrailerRow[]>([]);
   const [busy, setBusy] = useState(true);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import {
   Upload,
   Download,
@@ -115,6 +115,8 @@ function daysUntil(dateStr: string | null) {
 }
 
 export default function DocumentsPage() {
+  const supabase = supabaseBrowser();
+
   const [rows, setRows] = useState<DocRow[]>([]);
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -167,6 +169,7 @@ export default function DocumentsPage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load entity dropdown options when modal opens or entity type changes
@@ -175,8 +178,6 @@ export default function DocumentsPage() {
 
     const et = form.entity_type;
 
-    // For now, only make dropdowns for the main “human” entities.
-    // For maintenance/job/invoice you can still set entity type = other, or we can extend later.
     async function loadOptions() {
       setEntityLoading(true);
       setError(null);
@@ -192,7 +193,9 @@ export default function DocumentsPage() {
 
           const opts = (data ?? []).map((v: any) => ({
             id: v.id,
-            label: `${(v.registration ?? "").toUpperCase()}${v.make || v.model ? ` — ${v.make ?? ""} ${v.model ?? ""}`.trim() : ""}`,
+            label: `${(v.registration ?? "").toUpperCase()}${
+              v.make || v.model ? ` — ${v.make ?? ""} ${v.model ?? ""}`.trim() : ""
+            }`,
             active: v.active ?? null,
           }));
           setEntityOptions(opts);
@@ -256,6 +259,7 @@ export default function DocumentsPage() {
     }
 
     loadOptions();
+
     // reset entity_id whenever entity_type changes in modal
     setForm((p) => ({ ...p, entity_id: "" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -347,7 +351,7 @@ export default function DocumentsPage() {
       const entityType = form.entity_type;
       const entityIdRaw = form.entity_id.trim();
 
-      // Require entity_id for the 4 dropdown-backed types (and for anything except "other")
+      // Require entity_id for anything except "other"
       let entityId: string | null = null;
       if (entityType !== "other") {
         if (!entityIdRaw) throw new Error("Please select what this document relates to.");
@@ -492,11 +496,7 @@ export default function DocumentsPage() {
 
           <div style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
             <Filter size={18} style={{ color: "#6b7280" }} />
-            <select
-              value={filterEntity}
-              onChange={(e) => setFilterEntity(e.target.value as any)}
-              style={selectStyle}
-            >
+            <select value={filterEntity} onChange={(e) => setFilterEntity(e.target.value as any)} style={selectStyle}>
               <option value="all">All entities</option>
               <option value="vehicle">Vehicle</option>
               <option value="trailer">Trailer</option>
@@ -508,11 +508,7 @@ export default function DocumentsPage() {
               <option value="other">Other</option>
             </select>
 
-            <select
-              value={filterExpiring}
-              onChange={(e) => setFilterExpiring(e.target.value as any)}
-              style={selectStyle}
-            >
+            <select value={filterExpiring} onChange={(e) => setFilterExpiring(e.target.value as any)} style={selectStyle}>
               <option value="all">All expiry</option>
               <option value="soon">Expiring soon</option>
               <option value="expired">Expired</option>
@@ -655,22 +651,14 @@ export default function DocumentsPage() {
                 </p>
               </div>
 
-              <button
-                onClick={closeAdd}
-                type="button"
-                style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 18, color: "#6b7280" }}
-              >
+              <button onClick={closeAdd} type="button" style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 18, color: "#6b7280" }}>
                 ✕
               </button>
             </div>
 
             <div style={{ display: "grid", gap: 12 }}>
               <Field label="File *">
-                <input
-                  type="file"
-                  onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-                  style={inputStyle}
-                />
+                <input type="file" onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)} style={inputStyle} />
                 {selectedFile && (
                   <div style={{ marginTop: 6, fontSize: 12, color: "#6b7280" }}>
                     Selected: <strong>{selectedFile.name}</strong> ({bytesToHuman(selectedFile.size)})
@@ -717,14 +705,11 @@ export default function DocumentsPage() {
                     </select>
                   )}
                   {form.entity_type !== "other" && !entityLoading && entityOptions.length === 0 && (
-                    <div style={{ marginTop: 6, fontSize: 12, color: "#b45309" }}>
-                      No records found for this entity type yet.
-                    </div>
+                    <div style={{ marginTop: 6, fontSize: 12, color: "#b45309" }}>No records found for this entity type yet.</div>
                   )}
                 </Field>
               </div>
 
-              {/* Document type: presets + custom */}
               <Field label="Document type *">
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   <select
@@ -766,21 +751,11 @@ export default function DocumentsPage() {
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <Field label="Issue date (optional)">
-                  <input
-                    type="date"
-                    value={form.issue_date}
-                    onChange={(e) => setForm((p) => ({ ...p, issue_date: e.target.value }))}
-                    style={inputStyle}
-                  />
+                  <input type="date" value={form.issue_date} onChange={(e) => setForm((p) => ({ ...p, issue_date: e.target.value }))} style={inputStyle} />
                 </Field>
 
                 <Field label="Expiry date (optional)">
-                  <input
-                    type="date"
-                    value={form.expiry_date}
-                    onChange={(e) => setForm((p) => ({ ...p, expiry_date: e.target.value }))}
-                    style={inputStyle}
-                  />
+                  <input type="date" value={form.expiry_date} onChange={(e) => setForm((p) => ({ ...p, expiry_date: e.target.value }))} style={inputStyle} />
                 </Field>
               </div>
 
