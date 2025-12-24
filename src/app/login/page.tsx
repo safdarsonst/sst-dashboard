@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
 import { Truck, Mail } from "lucide-react";
 
@@ -12,11 +12,12 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function signIn(e: React.FormEvent) {
+    async function signIn(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
 
+    const supabase = supabaseBrowser();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     setBusy(false);
@@ -25,8 +26,10 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    // Force full reload so middleware sees the auth cookies immediately
+    window.location.href = "/dashboard";
   }
+
 
   return (
     <div style={{ 
